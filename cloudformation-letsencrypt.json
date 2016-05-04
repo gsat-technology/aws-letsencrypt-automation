@@ -1,0 +1,317 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "letsencrypt automated SSL certfificate creation",
+  "Parameters": {
+    "HostedZoneId": {
+      "Description": "Route53 Hosted Zone ID",
+      "Type": "AWS::Route53::HostedZone::Id",
+      "ConstraintDescription": "must be a Route53 Hosted Zone id such as Z23YXV4OVPL04A"
+    },
+    "Domain": {
+      "Description": "the domain you require an SSL certificate for",
+      "Type": "String",
+      "ConstraintDescription": "must be a fully qualified domain name"
+    },
+    "Email": {
+      "Description": "your email address to associated with the certificate request",
+      "Type": "String",
+      "ConstraintDescription": "must be an email address"
+    },
+    "S3BucketName": {
+      "Description": "the S3 bucket to store the letsencypt certificate output (note - this will be created and must be globally unique). Will not be created if AutoDelete=true",
+      "Type": "String",
+      "ConstraintDescription": "must be a string"
+    },
+    "KeyName": {
+      "Description": "choose ssh key for EC2",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "must be a string"
+    },
+    "VPC": {
+      "Description": "choose the VPC to launch EC2 instance into. The VPC must allow the EC2 to be automatically assigned a public IP",
+      "Type": "AWS::EC2::VPC::Id",
+      "ConstraintDescription": "must be a string"
+    },
+    "AvailabilityZone": {
+      "Description": "choose an availability zone",
+      "Type": "AWS::EC2::AvailabilityZone::Name",
+      "ConstraintDescription": "must be a string"
+    },
+    "AutoDelete": {
+      "Description": "when 'true', certificate will be uploaded to IAM and this stack will be torndown automatically",
+      "Type": "String",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "ConstraintDescription": "must choose true or false"
+    }
+  },
+  "Conditions": {
+    "CreateS3Bucket": {
+      "Fn::Equals": [
+        {
+          "Ref": "AutoDelete"
+        },
+        "false"
+      ]
+    }
+  },
+  "Resources": {
+    "S3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Condition": "CreateS3Bucket",
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "BucketName": {
+          "Ref": "S3BucketName"
+        }
+      }
+    },
+    "EC2SecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "Tags": [],
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupDescription": "EC2 SG",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "EC2Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "EC2SecurityGroup"
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -ex\n",
+                "\n",
+                "S3_BUCKET=",
+                {
+                  "Ref": "S3BucketName"
+                },
+                "\n",
+                "EMAIL=",
+                {
+                  "Ref": "Email"
+                },
+                "\n",
+                "DOMAIN=",
+                {
+                  "Ref": "Domain"
+                },
+                "\n",
+                "REGION=",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "AUTO_DELETE=",
+                {
+                  "Ref": "AutoDelete"
+                },
+                "\n",
+                "STACK_NAME=",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "\n",
+                "CERTS_PATH=/etc/letsencrypt/archive/$DOMAIN\n",
+                "\n",
+                "#output variables for debugging (see /var/log/cloud-init-output.log)\n",
+                "echo \"s3 bucket: $S3_BUCKET\"\n",
+                "echo \"email: $EMAIL\"\n",
+                "echo \"doman: $DOMAIN\"\n",
+                "echo \"region: $REGION\"\n",
+                "echo \"auto delete: $AUTO_DELETE\"\n",
+                "echo \"stack name: $STACK_NAME\"\n",
+                "echo \"certs path: $CERTS_PATH\"\n",
+                "\n",
+                "apt-get update\n",
+                "apt-get install -y apache2\n",
+                "apt-get install -y git\n",
+                "apt-get install -y python-pip\n",
+                "\n",
+                "pip install awscli\n",
+                "\n",
+                "git clone https://github.com/letsencrypt/letsencrypt /opt/letsencrypt\n",
+                "\n",
+                "cat >/cli.ini <<EOF\n",
+                "email=$EMAIL\n",
+                "agree-tos=True\n",
+                "text=True\n",
+                "EOF\n",
+                "\n",
+                "#input '1' as answer to interactive question\n",
+                "cat >interactive.txt <<EOF\n",
+                "1\n",
+                "EOF\n",
+                "\n",
+                "#use letsencrypt client to create the certificate\n",
+                "./opt/letsencrypt/letsencrypt-auto --config /cli.ini --apache -d $DOMAIN < interactive.txt || true\n",
+                "\n",
+                "#add chain certificate \n",
+                "wget -P $CERTS_PATH https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt \n",
+                "\n",
+                "if [ $AUTO_DELETE == 'true' ];\n",
+                "then\n",
+                "  #create new certificate in IAM and delete this stack\n",
+                "  aws iam upload-server-certificate --path /cloudfront/ --server-certificate-name $DOMAIN --certificate-body file://$CERTS_PATH/cert1.pem --private-key file://$CERTS_PATH/privkey1.pem --certificate-chain file://$CERTS_PATH/chain1.pem\n",
+                "  aws cloudformation --region $REGION delete-stack --stack-name $STACK_NAME\n",
+                "elif [ $AUTO_DELETE == 'false' ];\n",
+                "then\n",
+                "  #not going to autodelete... zip up and copy to s3 instead\n",
+                "  (cd $CERTS_PATH ; tar -zcvf $DOMAIN.tar.gz . )\n",
+                "  aws s3 --region $REGION cp $CERTS_PATH/$DOMAIN.tar.gz s3://$S3_BUCKET\n",
+                "  aws s3 --region $REGION cp /var/log/cloud-init-output.log s3://$S3_BUCKET\n",
+                "fi\n"
+              ]
+            ]
+          }
+        },
+        "InstanceType": "t2.nano",
+        "IamInstanceProfile": {
+          "Ref": "EC2InstanceProfile"
+        },
+        "AvailabilityZone": {
+          "Ref": "AvailabilityZone"
+        },
+        "ImageId": "ami-6c14310f",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "letsencrypt"
+          }
+        ]
+      }
+    },
+    "EC2InstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "EC2InstanceRolePolicy",
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "arn:aws:s3:::",
+                          {
+                            "Ref": "S3BucketName"
+                          },
+                          "/*"
+                        ]
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:*",
+                    "cloudformation:*",
+                    "ec2:*",
+                    "route53:*"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                }
+              ],
+              "Version": "2012-10-17"
+            }
+          }
+        ]
+      }
+    },
+    "EC2InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "EC2InstanceRole"
+          }
+        ]
+      }
+    },
+    "Route53Record": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "Comment": "A record pointing to ec2 instance",
+        "HostedZoneId": {
+          "Ref": "HostedZoneId"
+        },
+        "Name": {
+          "Ref": "Domain"
+        },
+        "ResourceRecords": [
+          {
+            "Fn::GetAtt": [
+              "EC2Instance",
+              "PublicIp"
+            ]
+          }
+        ],
+        "TTL": "300",
+        "Type": "A"
+      }
+    }
+  },
+  "Outputs": {}
+}
