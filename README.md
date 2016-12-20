@@ -28,7 +28,7 @@ This CloudFormation template automates this by:
 2. Upload `cloudformation-letsencrypt.json` 
 3. Complete parameters form
 
-![alt text](https://raw.githubusercontent.com/gsat-technology/aws-letsencrypt-automation/master/resources/letsencrypt-automation-diagram.png")
+![alt text](https://raw.githubusercontent.com/gsat-technology/aws-letsencrypt-automation/master/resources/letsencrypt-automation-diagram.png)
 
 ######AutoDelete: true | false
 
