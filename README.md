@@ -8,7 +8,7 @@ Solves this problem: You have a Route53 hosted zone and domain e.g. `mydomain.co
 
 The manual way of solving this problem is:
 
-- launch an EC2 instance
+- launch an EC2 instance with public IP address
 - point the Route53 record at the EC2 instance's public IP address
 - install the Letsencrypt tool
 - run the tool 
@@ -27,6 +27,8 @@ This CloudFormation template automates this by:
 1. Create new CloudFormation stack
 2. Upload `cloudformation-letsencrypt.json` 
 3. Complete parameters form
+
+![alt text](https://raw.githubusercontent.com/gsat-technology/aws-letsencrypt-automation/master/resources/letsencrypt-automation-diagram.png")
 
 ######AutoDelete: true | false
 
