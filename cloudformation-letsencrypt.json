@@ -38,7 +38,7 @@
       "ConstraintDescription": "must be a string"
     },
     "AutoDelete": {
-      "Description": "when 'true', certificate will be uploaded to IAM and this stack will be torndown automatically",
+      "Description": "when 'true', certificate will be uploaded to S3 and this stack will be torndown automatically",
       "Type": "String",
       "AllowedValues": [
         "true",

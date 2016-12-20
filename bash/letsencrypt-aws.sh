@@ -1,11 +1,11 @@
 #!/bin/bash
 
 #User-defined variables
-REGION=ap-southeast-2 
-HOSTED_ZONE_ID=<route 53 hosted zone id>  
-S3_BUCKET="<your s3 bucket name>"
-DOMAIN="<domain for ssl cert>"
-EMAIL="<email address attached to cert>"
+REGION="" #e.g. ap-southeast-2 
+HOSTED_ZONE_ID="<route53 hosted zone id>"
+S3_BUCKET="<s3 bucket name>"
+DOMAIN="<domain you want certificate for>"
+EMAIL="<your email address>"
 
 #EC2
 KEYPAIR=letsencrypt-keypair
