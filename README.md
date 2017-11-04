@@ -11,7 +11,7 @@ The manual way of solving this problem is:
 - launch an EC2 instance with public IP address
 - point the Route53 record at the EC2 instance's public IP address
 - install the Letsencrypt tool
-- run the tool 
+- run the tool
 - download the SSL certificate from the instance
 - destroy the EC2 instance
 
@@ -19,43 +19,42 @@ This CloudFormation template automates this by:
 
 - launching an EC2 instance
 - using EC2 user data to install and run the Letsencrypt tool
-- uploading certificate directly to IAM *OR* exporting certificate to nominated S3 bucket 
+- uploading certificate directly to IAM *OR* exporting certificate to nominated S3 bucket
 - self-destroying the stack
 
 ###Launching the Stack
 
 1. Create new CloudFormation stack
-2. Upload `cloudformation-letsencrypt.json` 
+2. Upload `cloudformation-letsencrypt.json`
 3. Complete parameters form
 
 ![alt text](https://raw.githubusercontent.com/gsat-technology/aws-letsencrypt-automation/master/resources/letsencrypt-automation-diagram.png)
 
-######AutoDelete: true | false
+###### AutoDelete: true | false
 
 When set to `true`, the resulting SSL certificates will be uploaded to IAM via API call. The EC2 instance will issue an API call to CloudFormation to destroy the stack.
 
 When set to `false` the certificates will be zipped up and PUT into the nominated S3 bucket. All stack resources will remain running and you will need to tear the stack down after retrieving the certificates from S3.
 
-######AvailabilityZone:
+###### AvailabilityZone:
 Choose an AZ from the drop-down list
 
-######Domain:
+###### Domain:
 The FQDN you want an SSL certificate for
 
-######HostedZoneId:
+###### HostedZoneId:
 Choose your Route53 hosted zone ID from the drop-down list
 
-######KeyName:
+###### KeyName:
 Choose an existing EC2 keypair from the drop-down
 
-######S3BucketName
+###### S3BucketName
 S3 bucket that will be created to store the SSL certificates after they've been created
 
-######VPC
+###### VPC
 Choose a VPC from the drop down list
 
 
-###Troubleshooting
+### Troubleshooting
 
-Check `/var/log/cloud-init-output.log` on EC2 instance 
-
+Check `/var/log/cloud-init-output.log` on EC2 instance
